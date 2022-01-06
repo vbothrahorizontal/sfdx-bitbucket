@@ -1,0 +1,162 @@
+# This file is a sample build configuration for SalesforceDX <> BitBucket <> Docker Pipeline
+# Only use spaces to indent your .yml configuration.
+# -----
+# You can specify a custom docker image from Docker Hub as your build environment.
+image: salesforce/salesforcedx:7.132.0-full
+
+definitions:
+  steps:
+    - step: &build
+        name: Install Salesforce CLI
+        condition:
+          changesets:
+            includePaths:
+              # Only run if anything in the force-app directory was touched
+              - "force-app/**"
+        script:
+          - echo ${BITBUCKET_BRANCH^^}
+          - echo ${BITBUCKET_PR_DESTINATION_BRANCH^^}
+          - echo ${BITBUCKET_TAG^^}
+          - echo ${BITBUCKET_DEPLOYMENT_ENVIRONMENT^^}
+            #Store the auth url of target org in the temp auth file
+          - echo $(authURL=SFDX_AUTH_${BITBUCKET_PR_DESTINATION_BRANCH^^} && echo ${!authURL}) >> authFile.txt
+          #Assign variables
+          - echo "export ROOTDIR=force-app" >> local_env.sh
+          - echo "export DEPLOYDIR=manifest" >> local_env.sh
+          - echo "export TESTLEVEL=$TEST_LEVEL" >> local_env.sh
+          #Export SFDX CLI
+          - export CLIURL=https://developer.salesforce.com/media/salesforce-cli/sfdx/channels/stable/sfdx-linux-x64.tar.xz
+          #Create sfdx directory
+          - mkdir ~/sfdx
+          #Install Salesforce CLI
+          #By default, the script installs the current version of Salesforce CLI. To install the release candidate, set the DX_CLI_URL_CUSTOM local variable to the appropriate URL
+          - wget -qO- ${DX_CLI_URL_CUSTOM-$CLIURL} | tar xJ -C ~/sfdx --strip-components 1
+          - export PATH=~/sfdx/bin:$PATH
+          - sfdx --version
+          - sfdx plugins --core
+          #Install JSON processor
+          - apt-get install -y jq
+        artifacts: # define the artifacts to be passed to each future step
+          - authFile.txt
+          - local_env.sh
+    - step: &delta
+        name: Install App and Create Delta
+        condition:
+          changesets:
+            includePaths:
+              # Only run if anything in the force-app directory was touched
+              - "force-app/**"
+        script:
+          - echo y | sfdx plugins:install sfdx-git-delta
+          - git config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+          - git fetch --all
+          - git --no-pager diff --name-status HEAD HEAD^
+          - sfdx sgd:source:delta --to HEAD --from HEAD^ --output . --api-version=52.0
+        artifacts: # define the artifacts to be passed to each future step
+          - package/**
+          - destructiveChanges/**
+    - step: &validate
+        name: Validate metadata to target org
+        condition:
+          changesets:
+            includePaths:
+              # Only run if anything in the force-app directory was touched
+              - "force-app/**"
+        script:
+          - echo "Pull Request Validation"
+          #Authorize target org using an SFDX auth URL stored within a file and set it as the default username that all commands run against
+          - cat authFile.txt
+          - sfdx force:auth:sfdxurl:store -f authFile.txt -s -a target-org
+          # use the artifact to get the variables set in the build step
+          - cat local_env.sh
+          - source local_env.sh
+          - if [ $BITBUCKET_PR_DESTINATION_BRANCH == 'qa' ]; then
+          - echo "--- Delta metadata validation against the QA org ---"
+          - echo y | sfdx plugins:install sfdx-git-delta
+          - git config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+          - git fetch --all
+          - git --no-pager diff --name-status HEAD origin/qa
+          - sfdx sgd:source:delta --to HEAD --from origin/qa --output . --api-version=52.0
+          - cat package/package.xml
+          #Convert Metadata
+          - sfdx force:source:convert --outputdir $DEPLOYDIR --manifest=package/package.xml
+          #Run validation to target deployment org and run unit tests
+          - sfdx force:mdapi:deploy --deploydir $DEPLOYDIR --testlevel $TESTLEVEL --checkonly -u target-org --wait 10
+          - cat destructiveChanges/destructiveChanges.xml
+          #Run validation to target deployment org and run unit tests
+          - sfdx force:mdapi:deploy --deploydir destructiveChanges --testlevel $TESTLEVEL --checkonly -u target-org --wait 10 --ignorewarnings
+          - else
+          - echo "--- All metadata validation against the org ---"
+          #Convert Metadata
+          - sfdx force:source:convert --rootdir $ROOTDIR --outputdir $DEPLOYDIR
+          #Run validation to target deployment org and run unit tests
+          - sfdx force:mdapi:deploy --deploydir $DEPLOYDIR --testlevel $TESTLEVEL --checkonly -u target-org --wait 10
+          - fi
+    - step: &deploy
+        name: Deploy metadata to target org
+        condition:
+          changesets:
+            includePaths:
+              # Only run if anything in the force-app directory was touched
+              - "force-app/**"
+        deployment: qa
+        script:
+          #Authorize target org using an SFDX auth URL stored within a file and set it as the default username that all commands run against
+          - echo $SFDX_AUTH_URL >> /tmp/authFile.txt
+          - sfdx force:auth:sfdxurl:store -f /tmp/authFile.txt -s -a target-org
+          # use the artifact to get the variables set in the build step
+          - cat local_env.sh
+          - source local_env.sh
+          # use the artifact to get the files set in the delta step
+          - echo "--- package.xml generated with added and modified metadata ---"
+          - cat package/package.xml
+          #Convert Metadata
+          - sfdx force:source:convert --outputdir $DEPLOYDIR --manifest=package/package.xml
+          #Deploy to target deployment org and run unit tests
+          - sfdx force:mdapi:deploy --deploydir $DEPLOYDIR --testlevel $TESTLEVEL -u target-org --wait 10
+          - echo "--- destructiveChanges.xml generated with deleted metadata ---"
+          - cat destructiveChanges/destructiveChanges.xml
+          #Deploy to target deployment org and run unit tests
+          - sfdx force:mdapi:deploy --deploydir destructiveChanges --testlevel $TESTLEVEL -u target-org --wait 10 --ignorewarnings
+
+pipelines:
+  pull-requests:
+    "**": #this runs as default for any branch not elsewhere defined
+      - step: *build
+      - step: *validate
+  branches: #these will run on every push of the branch
+    qa:
+      - step: *build
+      - step: *delta
+      - step:
+          <<: *deploy
+          deployment: qa
+    uat:
+      - step: *build
+      - step: *delta
+      - step:
+          <<: *deploy
+          deployment: uat
+    master:
+      - step: *build
+      - step: *delta
+      - step:
+          <<: *deploy
+          deployment: master
+  #default: #These commands run for all branches unless specified otherwise
+  #- step:
+  #name: Skip running pipeline
+  #script:
+  #- echo "Commited changes to a branch that does not match the listed branches in bitbucket-pipelines.yml."
+  #- echo "You can skip running pipeline by adding [skip ci] or [ci skip] (with []) to the git commit message."
+  #- sfdx --version
+  #- sfdx plugins --core
+  #Example shows how to run validation to target deployment org and run unit tests
+  #- sfdx force:mdapi:deploy --deploydir $DEPLOYDIR --testlevel $TESTLEVEL --checkonly -u target-org --wait 10
+  #Example shows how to deploy to target deployment org and run unit tests
+  #- sfdx force:mdapi:deploy --deploydir $DEPLOYDIR --testlevel $TESTLEVEL -u target-org --wait 10
+  #Example shows how to run unit tests on org
+  #- sfdx force:apex:test:run --targetusername target-org --wait 10 --resultformat tap --codecoverage --testlevel $TESTLEVEL
+  #Example shows how to run specified tests on org during deployment
+  #TEST_CLASSES: list of comma separated unit test class names, e.g. MyClassTest,YourClassTest
+  #- sfdx force:mdapi:deploy --deploydir $DEPLOYDIR --testlevel RunSpecifiedTests -r $TEST_CLASSES -u target-org --wait 10
