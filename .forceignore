@@ -8,7 +8,7 @@
 package.xml
 **/appMenus/**
 **/appSwitcher/**
-**/objectTranslations/**
+#**/objectTranslations/**
 #**/profiles/**
 #**/settings/**
 
@@ -30,10 +30,10 @@ package.xml
 **/classes/ChangePasswordController.cls-meta.xml
 **/classes/ChangePasswordControllerTest.cls
 **/classes/ChangePasswordControllerTest.cls-meta.xml
-**/classes/CommunitiesLandingController.cls
-**/classes/CommunitiesLandingController.cls-meta.xml
-**/classes/CommunitiesLandingControllerTest.cls
-**/classes/CommunitiesLandingControllerTest.cls-meta.xml
+# **/classes/CommunitiesLandingController.cls
+# **/classes/CommunitiesLandingController.cls-meta.xml
+# **/classes/CommunitiesLandingControllerTest.cls
+# **/classes/CommunitiesLandingControllerTest.cls-meta.xml
 **/classes/CommunitiesLoginController.cls
 **/classes/CommunitiesLoginController.cls
 **/classes/CommunitiesLoginController.cls-meta.xml
