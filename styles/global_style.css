@@ -1,0 +1,12 @@
+/* Start - Custom Font */
+/* Sandbox */
+@font-face {
+    font-family: "Proxima Nova Regular";
+    src: url('/sfsites/c/resource/Proxima_Nova/ProximaNova/Webfonts/proximanova_regular_macroman/proximanova-regular-webfont.woff') format("woff");
+}
+
+/* Production */
+@font-face {
+font-family: "Proxima Nova Regular";
+src: url('/resource/Proxima_Nova/ProximaNova/Webfonts/proximanova_regular_macroman/proximanova-regular-webfont.woff') format("woff");
+}
