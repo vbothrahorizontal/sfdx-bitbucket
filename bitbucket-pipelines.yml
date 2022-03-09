@@ -81,7 +81,7 @@ definitions:
           #Convert Metadata
           - sfdx force:source:convert --outputdir $DEPLOYDIR --manifest=package/package.xml
           #Run validation to target deployment org and run unit tests
-          - sfdx force:mdapi:deploy --deploydir $DEPLOYDIR --testlevel $TESTLEVEL --checkonly -u target-org --wait 10
+          - sfdx force:mdapi:deploy --deploydir $DEPLOYDIR --testlevel $TESTLEVEL --checkonly -u target-org --wait 10 --ignorewarnings
           - cat destructiveChanges/destructiveChanges.xml
           #Run validation to target deployment org and run unit tests
           - sfdx force:mdapi:deploy --deploydir destructiveChanges --testlevel $TESTLEVEL --checkonly -u target-org --wait 10 --ignorewarnings
@@ -90,7 +90,7 @@ definitions:
           #Convert Metadata
           - sfdx force:source:convert --rootdir $ROOTDIR --outputdir $DEPLOYDIR
           #Run validation to target deployment org and run unit tests
-          - sfdx force:mdapi:deploy --deploydir $DEPLOYDIR --testlevel $TESTLEVEL --checkonly -u target-org --wait 10
+          - sfdx force:mdapi:deploy --deploydir $DEPLOYDIR --testlevel $TESTLEVEL --checkonly -u target-org --wait 10 --ignorewarnings
           - fi
     - step: &deploy
         name: Deploy metadata to target org
@@ -113,7 +113,7 @@ definitions:
           #Convert Metadata
           - sfdx force:source:convert --outputdir $DEPLOYDIR --manifest=package/package.xml
           #Deploy to target deployment org and run unit tests
-          - sfdx force:mdapi:deploy --deploydir $DEPLOYDIR --testlevel $TESTLEVEL -u target-org --wait 10
+          - sfdx force:mdapi:deploy --deploydir $DEPLOYDIR --testlevel $TESTLEVEL -u target-org --wait 10 --ignorewarnings
           - echo "--- destructiveChanges.xml generated with deleted metadata ---"
           - cat destructiveChanges/destructiveChanges.xml
           #Deploy to target deployment org and run unit tests
