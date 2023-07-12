@@ -2,7 +2,7 @@
 # Only use spaces to indent your .yml configuration.
 # -----
 # You can specify a custom docker image from Docker Hub as your build environment.
-image: salesforce/salesforcedx:7.132.0-full
+image: salesforce/salesforcedx:7.206.6-full
 
 definitions:
   steps:
@@ -14,24 +14,28 @@ definitions:
               # Only run if anything in the force-app directory was touched
               - "force-app/**"
         script:
-          - echo ${BITBUCKET_BRANCH^^}
-          - echo ${BITBUCKET_PR_DESTINATION_BRANCH^^}
-          - echo ${BITBUCKET_TAG^^}
-          - echo ${BITBUCKET_DEPLOYMENT_ENVIRONMENT^^}
+          #- echo ${BITBUCKET_BRANCH^^}
+          #- echo ${BITBUCKET_PR_DESTINATION_BRANCH^^}
+          #- echo ${BITBUCKET_TAG^^}
+          #- echo ${BITBUCKET_DEPLOYMENT_ENVIRONMENT^^}
             #Store the auth url of target org in the temp auth file
           - echo $(authURL=SFDX_AUTH_${BITBUCKET_PR_DESTINATION_BRANCH^^} && echo ${!authURL}) >> authFile.txt
           #Assign variables
           - echo "export ROOTDIR=force-app" >> local_env.sh
           - echo "export DEPLOYDIR=manifest" >> local_env.sh
           - echo "export TESTLEVEL=$TEST_LEVEL" >> local_env.sh
+          - echo "export APIVERSION=$API_VERSION" >> local_env.sh
           #Export SFDX CLI
-          - export CLIURL=https://developer.salesforce.com/media/salesforce-cli/sfdx/channels/stable/sfdx-linux-x64.tar.xz
+          # - export CLIURL=https://developer.salesforce.com/media/salesforce-cli/sfdx/channels/stable/sfdx-linux-x64.tar.xz
           #Create sfdx directory
-          - mkdir ~/sfdx
+          # - mkdir ~/sfdx
           #Install Salesforce CLI
           #By default, the script installs the current version of Salesforce CLI. To install the release candidate, set the DX_CLI_URL_CUSTOM local variable to the appropriate URL
-          - wget -qO- ${DX_CLI_URL_CUSTOM-$CLIURL} | tar xJ -C ~/sfdx --strip-components 1
-          - export PATH=~/sfdx/bin:$PATH
+          # - wget -qO- ${DX_CLI_URL_CUSTOM-$CLIURL} | tar xJf -C ~/sfdx --strip-components 1
+          # - export PATH=~/sfdx/bin:$PATH
+          - node --version
+          - npm install sfdx-cli --global
+          - npm install @salesforce/cli --global
           - sfdx --version
           - sfdx plugins --core
           #Install JSON processor
@@ -39,6 +43,7 @@ definitions:
         artifacts: # define the artifacts to be passed to each future step
           - authFile.txt
           - local_env.sh
+
     - step: &delta
         name: Install App and Create Delta
         condition:
@@ -51,10 +56,11 @@ definitions:
           - git config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
           - git fetch --all
           - git --no-pager diff --name-status HEAD HEAD^
-          - sfdx sgd:source:delta --to HEAD --from HEAD^ --output . --api-version=52.0
+          - sfdx sgd:source:delta --to HEAD --from HEAD^ --output . --api-version=$APIVERSION
         artifacts: # define the artifacts to be passed to each future step
           - package/**
           - destructiveChanges/**
+
     - step: &validate
         name: Validate metadata to target org
         condition:
@@ -76,7 +82,7 @@ definitions:
           - git config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
           - git fetch --all
           - git --no-pager diff --name-status HEAD origin/qa
-          - sfdx sgd:source:delta --to HEAD --from origin/qa --output . --api-version=52.0
+          - sfdx sgd:source:delta --to HEAD --from origin/qa --output . --api-version=$APIVERSION
           - cat package/package.xml
           #Convert Metadata
           - sfdx force:source:convert --outputdir $DEPLOYDIR --manifest=package/package.xml
@@ -92,6 +98,7 @@ definitions:
           #Run validation to target deployment org and run unit tests
           - sfdx force:mdapi:deploy --deploydir $DEPLOYDIR --testlevel $TESTLEVEL --checkonly -u target-org --wait 10 --ignorewarnings
           - fi
+
     - step: &deploy
         name: Deploy metadata to target org
         condition:
@@ -124,6 +131,7 @@ pipelines:
     "**": #this runs as default for any branch not elsewhere defined
       - step: *build
       - step: *validate
+
   branches: #these will run on every push of the branch
     qa:
       - step: *build
